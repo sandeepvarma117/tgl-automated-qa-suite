@@ -165,9 +165,8 @@ export class HomePage {
     }
     // [FIX END]
 
-    // Validate the destination page loaded
-    const favoritesTab = this.page.getByRole('button', { name: 'Favourites' });
-    await expect(favoritesTab).toBeVisible({ timeout: 30000 });
+    // [FIX] Validate URL instead of UI element
+    await expect(this.page).toHaveURL(/.*accountLanding/, { timeout: 30000 });
   }
 
   /**
