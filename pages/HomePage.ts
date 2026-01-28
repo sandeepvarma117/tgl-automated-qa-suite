@@ -64,28 +64,30 @@ export class HomePage {
     await this.searchInput.fill(term);
     await this.searchInput.press('Enter');
 
-    // [FIX START] Mobile Keyboard Handling
-    // On mobile, the keyboard stays open and covers the results. We blur to dismiss it.
-    await this.searchInput.blur();
-    // [FIX END]
+    // [UPDATED] Removed .blur() call
+    // Reason: While intended for mobile keyboard dismissal, it caused timeouts on Desktop browsers.
   }
 
   /**
    * Selects a specific result from the Search Results list.
-   * * Strategy: Uses .nth(1) to avoid selecting the input box itself.
+   * * Strategy: Filters for VISIBLE results to avoid hidden mobile menu items.
    * @param resultName - Exact text of the link to click.
    */
   async selectSearchResult(resultName: string) {
-    const resultLink = this.page.getByText(resultName).nth(1);
+    // [FIX START] Robust Mobile Selection
+    // On Mobile, .nth(1) was failing because it counted hidden menu items.
+    // We now target the text specifically where visible=true.
+    const resultLink = this.page.locator(`text="${resultName}" >> visible=true`).first();
+    // [FIX END]
     
-    // [FIX START] Scroll Safety
     // Ensure the result isn't hidden behind a sticky header before checking visibility
     await resultLink.scrollIntoViewIfNeeded();
-    // [FIX END]
 
     // Ensure the result is actually visible before clicking
     await expect(resultLink).toBeVisible({ timeout: 10000 });
-    await resultLink.click();
+    
+    // 'force: true' ensures we click even if a tiny corner is covered by a header
+    await resultLink.click({ force: true });
   }
 
   /**
@@ -145,11 +147,15 @@ export class HomePage {
     if (await this.mobileMenuButton.isVisible()) {
       console.log('Mobile View Detected: Opening Hamburger Menu first...');
       await this.mobileMenuButton.click();
+      
+      // Short wait for menu animation to complete
+      await this.page.waitForTimeout(500);
     }
     // [FIX END]
 
     // 1. Find and click the 'Favourites' link in the top menu
-    const favoritesLink = this.page.getByRole('link', { name: 'Favourites' });
+    // We use first() to be safe against duplicate links in the DOM (mobile vs desktop menus)
+    const favoritesLink = this.page.getByRole('link', { name: 'Favourites' }).first();
     await expect(favoritesLink).toBeVisible();
     await favoritesLink.click();
     
