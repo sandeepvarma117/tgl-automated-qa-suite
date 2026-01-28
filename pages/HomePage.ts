@@ -64,8 +64,10 @@ export class HomePage {
     await this.searchInput.fill(term);
     await this.searchInput.press('Enter');
 
-    // [UPDATED] Removed .blur() call
-    // Reason: While intended for mobile keyboard dismissal, it caused timeouts on Desktop browsers.
+    // [STABILITY FIX] Mobile Search-as-you-type
+    // Wait for the DOM to settle after pressing Enter. 
+    // This prevents "Element is not attached to the DOM" errors on mobile.
+    await this.page.waitForTimeout(1000);
   }
 
   /**
@@ -148,7 +150,10 @@ export class HomePage {
       await this.mobileMenuButton.click();
       await this.page.waitForTimeout(500); // Wait for menu animation
 
-      // Mobile: Click the specific "Navigate to" button in the menu
+      // 1. Click the "Favourites" LINK in the menu (as per your flow)
+      await this.page.getByRole('link', { name: 'Favourites' }).first().click();
+
+      // 2. Click the "My favourites" BUTTON (the card that appears next)
       const mobileFavButton = this.page.getByRole('button', { name: 'Navigate to My favourites page' });
       await expect(mobileFavButton).toBeVisible();
       await mobileFavButton.click();
