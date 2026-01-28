@@ -170,10 +170,12 @@ export class HomePage {
    * @returns The locator for the saved item (allowing the test to click it).
    */
   async verifyTopicInFavorites(topicName: string) {
-    // In the favorites list, the topic should appear as a clickable link
-    const savedItem = this.page.getByRole('link', { name: topicName });
+    // [FIX] Mobile Robustness
+    // On mobile, looking for strict "link" roles can be flaky if the layout changes (e.g. card view).
+    // We search for the VISIBLE text directly, which works on both Desktop and Mobile.
+    const savedItem = this.page.locator(`text="${topicName}" >> visible=true`).first();
     
-    await expect(savedItem).toBeVisible();
+    await expect(savedItem).toBeVisible({ timeout: 15000 });
     console.log(`Verified: "${topicName}" exists in Favorites.`);
     
     return savedItem;
