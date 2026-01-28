@@ -143,23 +143,24 @@ export class HomePage {
    */
   async navigateToFavorites() {
     // [FIX START] Mobile Menu Handling
-    // If the mobile hamburger menu is visible, we must open it first to see the link.
     if (await this.mobileMenuButton.isVisible()) {
       console.log('Mobile View Detected: Opening Hamburger Menu first...');
       await this.mobileMenuButton.click();
-      
-      // Short wait for menu animation to complete
-      await this.page.waitForTimeout(500);
+      await this.page.waitForTimeout(500); // Wait for menu animation
+
+      // Mobile: Click the specific "Navigate to" button in the menu
+      const mobileFavButton = this.page.getByRole('button', { name: 'Navigate to My favourites page' });
+      await expect(mobileFavButton).toBeVisible();
+      await mobileFavButton.click();
+    } else {
+      // Desktop: Click the 'Favourites' link in the top menu
+      const favoritesLink = this.page.getByRole('link', { name: 'Favourites' });
+      await expect(favoritesLink).toBeVisible();
+      await favoritesLink.click();
     }
     // [FIX END]
 
-    // 1. Find and click the 'Favourites' link in the top menu
-    // We use first() to be safe against duplicate links in the DOM (mobile vs desktop menus)
-    const favoritesLink = this.page.getByRole('link', { name: 'Favourites' }).first();
-    await expect(favoritesLink).toBeVisible();
-    await favoritesLink.click();
-    
-    // 2. Validate the destination page loaded
+    // Validate the destination page loaded
     const favoritesTab = this.page.getByRole('button', { name: 'Favourites' });
     await expect(favoritesTab).toBeVisible({ timeout: 30000 });
   }
