@@ -166,7 +166,7 @@ export class HomePage {
     // [FIX END]
 
     // [FIX] Validate URL instead of UI element
-    await expect(this.page).toHaveURL(/.*accountLanding/, { timeout: 30000 });
+    await expect(this.page).toHaveURL(/.*favourites/, { timeout: 30000 });
   }
 
   /**
