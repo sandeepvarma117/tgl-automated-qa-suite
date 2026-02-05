@@ -157,16 +157,19 @@ export class HomePage {
       const mobileFavButton = this.page.getByRole('button', { name: 'Navigate to My favourites page' });
       await expect(mobileFavButton).toBeVisible();
       await mobileFavButton.click();
+      
+      // [FIX] Mobile specific URL check
+      await expect(this.page).toHaveURL(/.*favourites/, { timeout: 30000 });
+
     } else {
       // Desktop: Click the 'Favourites' link in the top menu
       const favoritesLink = this.page.getByRole('link', { name: 'Favourites' });
       await expect(favoritesLink).toBeVisible();
       await favoritesLink.click();
+      
+      // [FIX] Desktop specific URL check
+      await expect(this.page).toHaveURL(/.*accountLanding/, { timeout: 30000 });
     }
-    // [FIX END]
-
-    // [FIX] Validate URL instead of UI element
-    await expect(this.page).toHaveURL(/.*favourites/, { timeout: 30000 });
   }
 
   /**
