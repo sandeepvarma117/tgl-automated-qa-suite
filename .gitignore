@@ -1,8 +1,11 @@
+.env
 
 # Playwright
 node_modules/
 /test-results/
+/test-results-staging/
 /playwright-report/
+/playwright-report-staging/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/

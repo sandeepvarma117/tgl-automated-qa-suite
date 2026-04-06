@@ -3,14 +3,21 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "test": "playwright test",
+    "test:staging": "cross-env PLAYWRIGHT_ENV=staging playwright test",
+    "test:staging:headed": "cross-env PLAYWRIGHT_ENV=staging playwright test --headed",
+    "test:staging:debug": "cross-env PWDEBUG=1 PLAYWRIGHT_ENV=staging playwright test"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
     "@playwright/test": "^1.58.0",
-    "@types/node": "^25.0.10"
+    "@types/node": "^25.0.10",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.7"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.11.0"

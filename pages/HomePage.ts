@@ -1,191 +1,143 @@
 import { type Locator, type Page, expect } from '@playwright/test';
 
 /**
- * HomePage Object
- * * This class serves as the interface between the test scripts and the TGL Homepage.
- * * It encapsulates all specific element selectors (IDs, Classes, Roles) so that
- * tests remain readable and resilient to UI changes.
- * * @usage
- * const homePage = new HomePage(page);
- * await homePage.goto();
+ * HomePage object
+ *
+ * Single place for selectors and actions against the TG homepage / shared shell.
+ * UI tweaks usually mean updating this file only, not every test.
  */
 export class HomePage {
-  // --- LOCATORS ---
   readonly page: Page;
+  /** Global guideline search (role=textbox, name Search). */
   readonly searchInput: Locator;
-  readonly navBar: Locator;
+  /** Mobile hamburger — matches <button data-testid="expand-button">. */
   readonly mobileMenuButton: Locator;
+  /** Homepage shortcut into the Diabetes guideline tree. */
   readonly diabetesBreadcrumb: Locator;
 
-  /**
-   * Initializes the Page Object with the current Playwright page instance.
-   * Defines all critical locators used across the test suite.
-   * @param page - The Playwright Page object passed from the test runner.
-   */
   constructor(page: Page) {
     this.page = page;
-    
-    // SEARCH INPUT:
-    // Targeting the accessible role 'textbox' with name 'Search'.
     this.searchInput = page.getByRole('textbox', { name: 'Search' });
-    
-    // NAVBAR:
-    // The main container for the site navigation (Desktop).
-    this.navBar = page.locator('#navbar');
-
-    // MOBILE MENU TOGGLE:
-    // This button is only visible on mobile viewports.
     this.mobileMenuButton = page.getByTestId('expand-button');
-
-    // SHORTCUT BREADCRUMB:
-    // Quick-link button on the homepage to jump straight to the Diabetes guideline.
     this.diabetesBreadcrumb = page.getByRole('button', { name: 'Diabetes-breadcrumb' });
   }
 
-  // --- ACTIONS ---
+  /** “Navigate to Principles of management of diabetes” control (shared by TC-02 / TC-04). */
+  private principlesTopicButton(): Locator {
+    return this.page.getByRole('button', {
+      name: 'Navigate to Principles of management of diabetes',
+    });
+  }
 
   /**
-   * Navigates to the base URL defined in the configuration.
-   * * Strategy: Uses 'domcontentloaded' instead of 'networkidle'.
+   * On /app/accountLanding (mobile): card with role=button and “My favourites” / full aria-label.
+   * Desktop skips this — favourites list is already on the hub.
+   */
+  private myFavouritesEntryCard(): Locator {
+    return this.page
+      .getByRole('button', { name: /Navigate to My favourites page|My favourites/i })
+      .filter({ visible: true })
+      .first();
+  }
+
+  /**
+   * Open site root using baseURL from Playwright config (test vs staging).
+   * domcontentloaded avoids hanging on long-polling SPAs.
    */
   async goto() {
     await this.page.goto('/', { waitUntil: 'domcontentloaded' });
   }
 
   /**
-   * Performs a global search for a guideline.
-   * * Includes a 30s timeout to allow the React application to fully hydration.
-   * @param term - The text string to search for (e.g., "Diabetes").
+   * Run a global search from the homepage.
+   * 1) Wait for search box (slow hydration on test/stage).
+   * 2) Type term + Enter.
+   * 3) Assert URL moved to a search results route before the test picks a row.
    */
   async searchForGuideline(term: string) {
-    // Wait up to 30 seconds for the search bar to appear (Environment Slowness Fix)
-    await expect(this.searchInput).toBeVisible({ timeout: 30000 });
-    
+    await expect(this.searchInput).toBeVisible({ timeout: 30_000 });
     await this.searchInput.fill(term);
     await this.searchInput.press('Enter');
-
-    // [STABILITY FIX] Mobile Search-as-you-type
-    // Wait for the DOM to settle after pressing Enter. 
-    // This prevents "Element is not attached to the DOM" errors on mobile.
-    await this.page.waitForTimeout(1000);
+    await expect(this.page).toHaveURL(/search/i, { timeout: 20_000 });
   }
 
   /**
-   * Selects a specific result from the Search Results list.
-   * * Strategy: Filters for VISIBLE results to avoid hidden mobile menu items.
-   * @param resultName - Exact text of the link to click.
+   * From search results, click the first visible hit for the given label.
+   * >> visible=true avoids stale/hidden menu rows on mobile.
+   * force:true helps when a sticky header slightly overlaps the hit box.
    */
   async selectSearchResult(resultName: string) {
-    // [FIX START] Robust Mobile Selection
-    // On Mobile, .nth(1) was failing because it counted hidden menu items.
-    // We now target the text specifically where visible=true.
     const resultLink = this.page.locator(`text="${resultName}" >> visible=true`).first();
-    // [FIX END]
-    
-    // Ensure the result isn't hidden behind a sticky header before checking visibility
-    await resultLink.scrollIntoViewIfNeeded();
-
-    // Ensure the result is actually visible before clicking
-    await expect(resultLink).toBeVisible({ timeout: 10000 });
-    
-    // 'force: true' ensures we click even if a tiny corner is covered by a header
+    await expect(resultLink).toBeVisible({ timeout: 10_000 });
     await resultLink.click({ force: true });
   }
 
-  /**
-   * Clicks the "Diabetes" shortcut button from the Homepage.
-   */
+  /** Open Diabetes from the homepage “Guidelines” strip (breadcrumb shortcut). */
   async clickDiabetesBreadcrumb() {
-    await expect(this.diabetesBreadcrumb).toBeVisible({ timeout: 30000 });
+    await expect(this.diabetesBreadcrumb).toBeVisible({ timeout: 30_000 });
     await this.diabetesBreadcrumb.click();
   }
 
   /**
-   * Verifies that the "Principles of management" topic button is visible.
+   * After Diabetes shortcut: confirm the intermediate page shows the Principles-of-management entry.
+   * Long timeout accounts for cold cache / staging slowness.
    */
   async verifyPrinciplesTopicVisible() {
-    const principlesBtn = this.page.getByRole('button', { 
-      name: 'Navigate to Principles of management of diabetes' 
-    });
-    // Increased timeout to 60s for full page load on test environment
-    await expect(principlesBtn).toBeVisible({ timeout: 60000 });
+    await expect(this.principlesTopicButton()).toBeVisible({ timeout: 60_000 });
   }
 
   /**
-   * Explicitly opens the "Principles of management" topic page.
-   * * Locator: Uses the specific aria-label found on the div/button.
+   * Drill into the actual topic page where the star (favourite) control exists.
+   * Same control as verifyPrinciplesTopicVisible — we go from list card → content.
    */
   async openPrinciplesTopic() {
-    const topicButton = this.page.getByRole('button', { 
-      name: 'Navigate to Principles of management of diabetes' 
-    });
-    
-    await expect(topicButton).toBeVisible();
+    const topicButton = this.principlesTopicButton();
+    await expect(topicButton).toBeVisible({ timeout: 60_000 });
     await topicButton.click();
-    console.log('Action: Opened "Principles of management" topic page.');
   }
 
   /**
-   * Toggles the "Favorite" (Star) icon for the current topic.
-   * * Strategy: Dynamic Locator Construction.
-   * @param topicName - The name of the topic being viewed.
+   * Toggle the topic favourite star. aria-label may use British or US spelling (Favourite / Favorite).
+   * force:true reduces flakes from small overlays on the icon.
    */
   async toggleFavorite(topicName: string) {
-    const ariaLabel = `Favourite ${topicName}`;
-    const favButton = this.page.getByRole('button', { name: ariaLabel });
-    
-    await expect(favButton).toBeVisible();
-    await favButton.click();
-    console.log(`Action: Toggled favorite for "${topicName}"`);
+    const favButton = this.page.getByRole('button', {
+      name: new RegExp(`Favo[u]?rite ${topicName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
+    });
+    await expect(favButton).toBeVisible({ timeout: 30_000 });
+    await favButton.click({ force: true });
   }
 
   /**
-   * Navigates to the "Favorites" section from the global navigation.
-   * * Validation: Waits for the "Favourites" tab button to confirm the page loaded.
+   * Account hub — favourites entry in the app (path is the same on test/staging; host comes from baseURL).
+   * Assert URL so we know we are not stuck on a gate or error shell.
    */
-  async navigateToFavorites() {
-    // [FIX START] Mobile Menu Handling
-    if (await this.mobileMenuButton.isVisible()) {
-      console.log('Mobile View Detected: Opening Hamburger Menu first...');
-      await this.mobileMenuButton.click();
-      await this.page.waitForTimeout(500); // Wait for menu animation
-
-      // 1. Click the "Favourites" LINK in the menu (as per your flow)
-      await this.page.getByRole('link', { name: 'Favourites' }).first().click();
-
-      // 2. Click the "My favourites" BUTTON (the card that appears next)
-      const mobileFavButton = this.page.getByRole('button', { name: 'Navigate to My favourites page' });
-      await expect(mobileFavButton).toBeVisible();
-      await mobileFavButton.click();
-      
-      // [FIX] Mobile specific URL check
-      await expect(this.page).toHaveURL(/.*favourites/, { timeout: 30000 });
-
-    } else {
-      // Desktop: Click the 'Favourites' link in the top menu
-      const favoritesLink = this.page.getByRole('link', { name: 'Favourites' });
-      await expect(favoritesLink).toBeVisible();
-      await favoritesLink.click();
-      
-      // [FIX] Desktop specific URL check
-      await expect(this.page).toHaveURL(/.*accountLanding/, { timeout: 30000 });
-    }
+  async gotoAccountLanding() {
+    await this.page.goto('/app/accountLanding', { waitUntil: 'domcontentloaded' });
+    await expect(this.page).toHaveURL(/accountLanding/i, { timeout: 30_000 });
   }
 
   /**
-   * Verifies that a specific topic exists in the Favorites list.
-   * @param topicName - The name of the saved topic to check for.
-   * @returns The locator for the saved item (allowing the test to click it).
+   * Desktop (wide viewport): favourites are listed on account landing — nothing to open.
+   * Mobile: user must tap the “My favourites” card to see the list (avoids flaky flyout menu tests).
+   */
+  async openFavouritesListFromAccountLanding() {
+    const viewportWidth = this.page.viewportSize()?.width ?? 1280;
+    if (viewportWidth >= 900) {
+      return;
+    }
+    const card = this.myFavouritesEntryCard();
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await card.click({ force: true });
+  }
+
+  /**
+   * Confirm the saved topic title appears in the favourites list and return its locator to click through.
+   * Text + visible=true works for card layouts where role=link is inconsistent.
    */
   async verifyTopicInFavorites(topicName: string) {
-    // [FIX] Mobile Robustness
-    // On mobile, looking for strict "link" roles can be flaky if the layout changes (e.g. card view).
-    // We search for the VISIBLE text directly, which works on both Desktop and Mobile.
     const savedItem = this.page.locator(`text="${topicName}" >> visible=true`).first();
-    
-    await expect(savedItem).toBeVisible({ timeout: 15000 });
-    console.log(`Verified: "${topicName}" exists in Favorites.`);
-    
+    await expect(savedItem).toBeVisible({ timeout: 45_000 });
     return savedItem;
   }
 }

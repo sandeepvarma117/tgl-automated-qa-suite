@@ -1,73 +1,92 @@
+import * as path from 'path';
 import { defineConfig, devices } from '@playwright/test';
 
-/**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
- */
-// import dotenv from 'dotenv';
-// import path from 'path';
-// dotenv.config({ path: path.resolve(__dirname, '.env') });
+import dotenv from 'dotenv';
 
 /**
- * See https://playwright.dev/docs/test-configuration.
+ * Load .env for local overrides (PLAYWRIGHT_BASE_URL, optional PLAYWRIGHT_HTML_REPORT_DIR).
+ * Staging credentials for B2C are read again in staging-b2c.setup.ts inside workers.
+ */
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+/** When set to "staging", use stage base URL, separate report/output dirs, and auth setup project. */
+const isStaging = process.env.PLAYWRIGHT_ENV === 'staging';
+
+const baseURL = isStaging
+  ? process.env.PLAYWRIGHT_BASE_URL ?? 'https://stage.app.tg.org.au/'
+  : process.env.PLAYWRIGHT_BASE_URL ?? 'https://test.app.tg.org.au/';
+
+const stagingStorageState =
+  isStaging ? { storageState: 'playwright/.auth/staging.json' as const } : {};
+
+const reportFolder =
+  process.env.PLAYWRIGHT_HTML_REPORT_DIR ??
+  (isStaging ? 'playwright-report-staging' : 'playwright-report');
+
+const resultsFolder = isStaging ? 'test-results-staging' : 'test-results';
+
+/** Setup file must not run as a normal test in browser projects (only via dependencies). */
+const testIgnoreSetup = '**/staging-b2c.setup.ts';
+
+/**
+ * Playwright config: https://playwright.dev/docs/test-configuration
+ * - staging: setup-staging runs first and writes playwright/.auth/staging.json
+ * - trace: retain-on-failure locally for easier debugging; CI uses on-first-retry
  */
 export default defineConfig({
   testDir: './tests',
-  /* Run tests in files in parallel */
+  outputDir: resultsFolder,
   fullyParallel: true,
-  /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
-  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
-  
-  /* FIX 1: Increase global timeout to 60 seconds for slow test environments */
+  reporter: [['html', { outputFolder: reportFolder, open: 'never' }]],
   timeout: 60000,
 
-  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    /* Base URL to use in actions like `await page.goto('')`. */
-    baseURL: 'https://test.app.tg.org.au/',
-
-    /* FIX 2: Ignore SSL errors (Common cause of failure in Test environments) */
+    baseURL,
     ignoreHTTPSErrors: true,
-
-    /* Capture screenshots if a test fails (Crucial for debugging) */
     screenshot: 'only-on-failure',
-
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    // Local: keep trace on failure for debugging; CI: trace only on retry to save space
+    trace: process.env.CI ? 'on-first-retry' : 'retain-on-failure',
   },
 
-  /* Configure projects for major browsers */
   projects: [
+    ...(isStaging
+      ? [
+          {
+            name: 'setup-staging',
+            testMatch: /staging-b2c\.setup\.ts/,
+            timeout: 180_000,
+            use: {
+              baseURL,
+            },
+          },
+        ]
+      : []),
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], ...stagingStorageState },
+      dependencies: isStaging ? (['setup-staging'] as const) : [],
+      testIgnore: testIgnoreSetup,
     },
-
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: { ...devices['Desktop Firefox'], ...stagingStorageState },
+      dependencies: isStaging ? (['setup-staging'] as const) : [],
+      testIgnore: testIgnoreSetup,
     },
-
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: { ...devices['Desktop Safari'], ...stagingStorageState },
+      dependencies: isStaging ? (['setup-staging'] as const) : [],
+      testIgnore: testIgnoreSetup,
     },
-
-    /* Test against mobile viewports. */
-    /* STRATEGY: Enabled this to prove "Mobile/PWA" competence mentioned in JD */
     {
       name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      use: { ...devices['Pixel 5'], ...stagingStorageState },
+      dependencies: isStaging ? (['setup-staging'] as const) : [],
+      testIgnore: testIgnoreSetup,
     },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
   ],
 });
